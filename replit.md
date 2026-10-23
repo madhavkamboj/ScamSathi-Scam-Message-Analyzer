@@ -1,44 +1,45 @@
-# [Project name]
+# ScamSathi
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+ScamSathi is a mobile-friendly Indian scam message analyser that explains suspicious message patterns using transparent, local-only rules.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- Use the managed `artifacts/scamsathi: web` workflow to run the app in Replit; it supplies the required `PORT` and `BASE_PATH`.
+- To run the dev server manually from the workspace root: `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/scamsathi run dev`
+- `pnpm --filter @workspace/scamsathi run typecheck` — typecheck the app
+- `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/scamsathi run build` — build the app
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- The ScamSathi app does not require a database, API, account, or external service.
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React + Vite
+- Scam checks run locally in the browser; recent history is stored in local storage.
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/scamsathi/` — ScamSathi web app
+- `artifacts/api-server/` — shared API server scaffold; ScamSathi does not send analysis data to it.
+- `lib/` — shared workspace libraries
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Message analysis is deterministic and client-side; pasted message text is not sent to an external service.
+- Analysis history is kept only in the current browser's local storage.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users can analyse suspicious messages, review the rule-based warnings and safe next steps, try example messages, and revisit recent local analyses. Risk scores are heuristic estimates, not proof of fraud.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the app mobile-friendly, use a dark navy cybersecurity theme, and avoid login or personal-data collection.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Do not open, follow, or request suspicious URLs during analysis.
 
 ## Pointers
 

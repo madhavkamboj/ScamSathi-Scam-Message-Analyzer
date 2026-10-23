@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ScamSathi"
+description = "A mobile-friendly Indian scam message analyzer that uses transparent, local-only rules to explain suspicious message patterns and recommend safe next steps."
+version = "1.0.0"
+id = "artifacts/scamsathi"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22635
+
+[services.development]
+run = "pnpm --filter @workspace/scamsathi run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/scamsathi", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/scamsathi/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22635"
+BASE_PATH = "/"
