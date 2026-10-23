@@ -20,7 +20,62 @@ export type AnalysisRecord = {
 
 // Transparent scoring: a category contributes once even when several phrases match.
 // Maximum raw score is capped at 100. Levels: Low 0–29, Medium 30–59, High 60–100.
-const RULES = [
+const CREDENTIAL_TERMS = /\b(?:otp|one[- ]time password|pin|password|cvv|passcode)\b/gi;
+const CREDENTIAL_REQUEST_ACTIONS = /\b(?:share|send|provide|enter|reply|tell|submit|confirm|verify|disclose|give|forward|text|ask|request)\b/gi;
+const NEGATED_REQUEST_SUFFIX = /\b(?:never|not|do not|don't|dont|won't|will not|would not|wouldn't|cannot|can't)\b(?:[\s,]+\w+){0,3}[\s,]*$/i;
+const CLAUSE_BREAK = /[.!?;\n]/;
+const CONTRAST_CUE = /\b(?:but|however|yet|instead|actually|although|still)\b/gi;
+
+function hasCredentialRequest(message: string): boolean {
+  const credentials = [...message.matchAll(CREDENTIAL_TERMS)].map((match) => ({
+    start: match.index!,
+    end: match.index! + match[0].length,
+  }));
+  const actions = [...message.matchAll(CREDENTIAL_REQUEST_ACTIONS)].map((match) => ({
+    start: match.index!,
+    end: match.index! + match[0].length,
+  }));
+
+  return actions.some((action) => {
+    const linkedCredential = credentials.some((credential) => {
+      const gap = action.start < credential.start
+        ? message.slice(action.end, credential.start)
+        : message.slice(credential.end, action.start);
+      return gap.length <= 45 && !CLAUSE_BREAK.test(gap);
+    });
+    if (!linkedCredential) return false;
+
+    const clauseStart = Math.max(
+      message.lastIndexOf('.', action.start),
+      message.lastIndexOf('!', action.start),
+      message.lastIndexOf('?', action.start),
+      message.lastIndexOf(';', action.start),
+      message.lastIndexOf('\n', action.start),
+    ) + 1;
+    let prefix = message.slice(clauseStart, action.start);
+    let lastContrastIndex = -1;
+    let lastContrastEnd = -1;
+    for (const match of prefix.matchAll(CONTRAST_CUE)) {
+      lastContrastIndex = match.index!;
+      lastContrastEnd = match.index! + match[0].length;
+    }
+    if (lastContrastIndex >= 0) prefix = prefix.slice(lastContrastEnd);
+
+    return !NEGATED_REQUEST_SUFFIX.test(prefix.trimEnd());
+  });
+}
+
+type DetectionRule = {
+  id: string;
+  category: string;
+  title: string;
+  weight: number;
+  patterns: RegExp[];
+  matches?: (message: string) => boolean;
+  explanation: string;
+};
+
+const RULES: DetectionRule[] = [
   {
     id: 'urgency',
     category: 'Urgency',
@@ -42,10 +97,8 @@ const RULES = [
     category: 'Credentials',
     title: 'Sensitive information request',
     weight: 34,
-    patterns: [
-      /\b(?:otp|one[- ]time password|pin|password|cvv|passcode)\b.{0,45}\b(?:share|send|provide|enter|reply|tell|submit|confirm|verify|disclose|give|forward|text)\b/i,
-      /\b(?:share|send|provide|enter|reply|tell|submit|confirm|verify|disclose|give|forward|text)\b.{0,45}\b(?:(?:your|the|an?)\s+)?(?:otp|one[- ]time password|pin|password|cvv|passcode)\b/i,
-    ],
+    patterns: [],
+    matches: hasCredentialRequest,
     explanation: 'The message mentions a credential such as an OTP, PIN, password or CVV. Never share these, even with someone claiming to be support.',
   },
   {
@@ -115,7 +168,9 @@ function hasDeceptiveUrl(message: string): boolean {
 }
 
 export function analyzeMessage(message: string): AnalysisRecord {
-  const warnings: Warning[] = RULES.filter((rule) => rule.patterns.some((pattern) => pattern.test(message))).map((rule) => ({
+  const warnings: Warning[] = RULES.filter((rule) =>
+    rule.matches ? rule.matches(message) : rule.patterns.some((pattern) => pattern.test(message)),
+  ).map((rule) => ({
     id: rule.id,
     category: rule.category,
     title: rule.title,

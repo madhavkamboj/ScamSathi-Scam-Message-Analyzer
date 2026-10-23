@@ -7,6 +7,7 @@ ScamSathi is a mobile-friendly Indian scam message analyser that explains suspic
 - Use the managed `artifacts/scamsathi: web` workflow to run the app in Replit; it supplies the required `PORT` and `BASE_PATH`.
 - To run the dev server manually from the workspace root: `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/scamsathi run dev`
 - `pnpm --filter @workspace/scamsathi run typecheck` — typecheck the app
+- `pnpm --filter @workspace/scamsathi run test` — run the analyzer regression tests
 - `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/scamsathi run build` — build the app
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
