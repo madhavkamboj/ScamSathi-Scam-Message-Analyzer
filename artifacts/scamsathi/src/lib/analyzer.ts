@@ -25,6 +25,54 @@ const CREDENTIAL_REQUEST_ACTIONS = /\b(?:share|send|provide|enter|reply|tell|sub
 const NEGATED_REQUEST_SUFFIX = /\b(?:never|not|do not|don't|dont|won't|will not|would not|wouldn't|cannot|can't)\b(?:[\s,]+\w+){0,3}[\s,]*$/i;
 const CLAUSE_BREAK = /[.!?;\n]/;
 const CONTRAST_CUE = /\b(?:but|however|yet|instead|actually|although|still)\b/gi;
+const PRIZE_TERMS = /\b(?:prize|lottery|lucky draw|winnings?|rewards?|jackpot|gift)\b/i;
+const PRIZE_CLAIM_ACTIONS = /\b(?:claim|release|receive|collect|redeem|withdraw)\b/i;
+const UPFRONT_FEE_REQUEST = [
+  /\b(?:pay|send|transfer|deposit|submit|remit)\b.{0,70}\b(?:(?:processing|registration|advance|upfront|claim|release)\s+)?(?:fee|tax|deposit|payment)\b/i,
+  /\b(?:(?:processing|registration|advance|upfront|claim|release)\s+)?(?:fee|tax|deposit|payment)\b.{0,55}\b(?:required|mandatory|due|payable|must\s+be\s+paid|needs?\s+to\s+be\s+paid)\b/i,
+  /\b(?:(?:processing|registration|advance|upfront|claim|release)\s+)?(?:fee|tax|deposit|payment)\b.{0,35}\b(?:to|for)\s+(?:claim|release|receive|collect|redeem)\b/i,
+  /\b(?:deposit|pay|send|transfer)\b.{0,45}(?:(?:₹|rs\.?|inr)\s*[\d,]+(?:\.\d{1,2})?|\b\d{2,}(?:\.\d{1,2})?).{0,55}\b(?:to|for)\s+(?:claim|release|receive|collect|redeem)\b/i,
+];
+const NEGATED_FEE_REQUEST = /\b(?:never|do not|don't|dont|should not|shouldn't|must not|mustn't|cannot|can't|no|no need to|not required to|not necessary to)\b(?:[\s,]+\w+){0,4}[\s,]*$/i;
+
+function isNegatedPaymentRequest(message: string, requestStart: number): boolean {
+  const clauseStart = Math.max(
+    message.lastIndexOf('.', requestStart),
+    message.lastIndexOf('!', requestStart),
+    message.lastIndexOf('?', requestStart),
+    message.lastIndexOf(';', requestStart),
+    message.lastIndexOf('\n', requestStart),
+  ) + 1;
+  let prefix = message.slice(clauseStart, requestStart);
+  let lastContrastEnd = -1;
+  for (const match of prefix.matchAll(CONTRAST_CUE)) {
+    lastContrastEnd = match.index! + match[0].length;
+  }
+  if (lastContrastEnd >= 0) prefix = prefix.slice(lastContrastEnd);
+  return NEGATED_FEE_REQUEST.test(prefix.trimEnd());
+}
+
+function hasPrizeFeeScam(message: string): boolean {
+  if (!PRIZE_TERMS.test(message) || !PRIZE_CLAIM_ACTIONS.test(message)) return false;
+
+  const prizeIndex = message.search(PRIZE_TERMS);
+  const claimIndex = message.search(PRIZE_CLAIM_ACTIONS);
+  const prizeClaimDistance = Math.abs(prizeIndex - claimIndex);
+  if (prizeClaimDistance > 180) return false;
+
+  for (const pattern of UPFRONT_FEE_REQUEST) {
+    for (const request of message.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))) {
+      if (request.index === undefined || isNegatedPaymentRequest(message, request.index)) continue;
+
+      const requestCenter = request.index + Math.floor(request[0].length / 2);
+      if (Math.abs(requestCenter - prizeIndex) <= 220 && Math.abs(requestCenter - claimIndex) <= 180) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
 
 function hasCredentialRequest(message: string): boolean {
   const credentials = [...message.matchAll(CREDENTIAL_TERMS)].map((match) => ({
@@ -112,6 +160,15 @@ const RULES: DetectionRule[] = [
       /\b(?:approve|accept)\b.{0,20}\b(?:upi|collect|payment|request)\b/i,
     ],
     explanation: 'A payment, fee, transfer or refund action is mentioned. A refund should not require you to reveal a PIN or approve an unexpected collect request.',
+  },
+  {
+    id: 'prize-fee-scam',
+    category: 'Prize',
+    title: 'Prize claim with upfront fee',
+    weight: 40,
+    patterns: [],
+    matches: hasPrizeFeeScam,
+    explanation: 'An unexpected prize claim that requires an advance payment is a strong scam warning sign. Do not pay before independently verifying the claim.',
   },
   {
     id: 'shortener',
@@ -203,6 +260,7 @@ export function analyzeMessage(message: string): AnalysisRecord {
   if (warnings.some((warning) => warning.category === 'Link')) recommendations.add('Do not open the link. If needed, open the organisation’s official app or type its known address yourself.');
   if (warnings.some((warning) => warning.category === 'Credentials')) recommendations.add('Never share an OTP, PIN, password or CVV. A legitimate support agent will not need them.');
   if (warnings.some((warning) => warning.category === 'Payment')) recommendations.add('Do not approve a collect request or pay an unexpected fee to receive a refund.');
+  if (warnings.some((warning) => warning.id === 'prize-fee-scam')) recommendations.add('Do not pay an upfront fee to claim an unexpected prize. Verify the claim independently through the organiser’s official channel.');
   if (warnings.some((warning) => warning.category === 'Threat' || warning.category === 'Urgency')) recommendations.add('Pause and contact the organisation using a number or channel you already trust.');
   if (!warnings.length) recommendations.add('No listed warning pattern was detected. This is not proof that the message is safe; verify unexpected requests independently.');
   recommendations.add('If you already shared money or credentials, contact your bank immediately and use India’s cybercrime helpline 1930.');
